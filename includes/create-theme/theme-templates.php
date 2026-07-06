@@ -2,6 +2,7 @@
 
 require_once( __DIR__ . '/theme-media.php' );
 require_once( __DIR__ . '/theme-patterns.php' );
+require_once( __DIR__ . '/theme-urls.php' );
 
 class CBT_Theme_Templates {
 
@@ -166,6 +167,7 @@ class CBT_Theme_Templates {
 				'localizeText'   => false,
 				'removeNavRefs'  => true,
 				'localizeImages' => true,
+				'localizeUrls'   => true,
 			);
 		}
 
@@ -183,6 +185,10 @@ class CBT_Theme_Templates {
 		if ( array_key_exists( 'localizeImages', $options ) && $options['localizeImages'] ) {
 			$validated_media = array_key_exists( 'validatedMedia', $options ) ? $options['validatedMedia'] : null;
 			$template        = CBT_Theme_Media::make_template_images_local( $template, $validated_media );
+		}
+
+		if ( ! array_key_exists( 'localizeUrls', $options ) || $options['localizeUrls'] ) {
+			$template = CBT_Theme_URLs::make_template_urls_local( $template );
 		}
 
 		if ( $slug ) {
