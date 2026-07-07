@@ -2,244 +2,43 @@
 
 class CBT_Theme_URLs {
 	/**
-	 * Get path prefixes that point to the active theme directory.
+	 * Regex that captures URL characters until a typical delimiter.
 	 *
-	 * @return array
+	 * @var string
 	 */
-	private static function get_active_theme_path_prefixes() {
-		$stylesheet = wp_get_theme()->get_stylesheet();
-
-		if ( ! is_string( $stylesheet ) || '' === $stylesheet ) {
-			return array();
-		}
-
-		$content_path = wp_parse_url( content_url(), PHP_URL_PATH );
-		$content_path = is_string( $content_path ) && '' !== $content_path ? rtrim( $content_path, '/' ) : '/wp-content';
-
-		$theme_path = $content_path . '/themes/' . trim( $stylesheet, '/' ) . '/';
-
-		return array_values(
-			array_unique(
-				array_filter(
-					array( $theme_path )
-				)
-			)
-		);
-	}
+	private const URL_SUFFIX_REGEX = '[^\s"\'<>)]*';
 
 	/**
-	 * Get absolute URL prefixes for the active theme directory.
-	 *
-	 * @return array
-	 */
-	private static function get_active_theme_absolute_url_prefixes() {
-		$absolute_prefixes = array();
-
-		foreach ( self::get_local_url_prefixes() as $local_prefix ) {
-			foreach ( self::get_active_theme_path_prefixes() as $theme_path_prefix ) {
-				$absolute_prefixes[] = untrailingslashit( $local_prefix ) . $theme_path_prefix;
-			}
-		}
-
-		return array_values(
-			array_unique(
-				array_filter( $absolute_prefixes )
-			)
-		);
-	}
-
-	/**
-	 * Get unique URL prefixes that should be treated as local site URLs.
-	 *
-	 * @return array
-	 */
-	private static function get_local_url_prefixes() {
-		return array_values(
-			array_unique(
-				array_filter(
-					array(
-						untrailingslashit( home_url() ),
-						untrailingslashit( site_url() ),
-					)
-				)
-			)
-		);
-	}
-
-	/**
-	 * Convert an absolute site URL into a dynamic home_url() expression.
-	 *
-	 * @param string $absolute_url Site absolute URL (escaped or unescaped).
-	 * @return string
-	 */
-	private static function absolute_site_url_to_home_url_php( $absolute_url ) {
-		$normalized_url = str_replace( '\\/', '/', $absolute_url );
-		$relative_url   = null;
-
-		foreach ( self::get_local_url_prefixes() as $prefix ) {
-			if ( str_starts_with( $normalized_url, $prefix ) ) {
-				$relative_url = substr( $normalized_url, strlen( $prefix ) );
-				break;
-			}
-		}
-
-		if ( null === $relative_url ) {
-			return $absolute_url;
-		}
-
-		if ( '' === $relative_url ) {
-			$relative_url = '/';
-		} elseif ( '/' !== substr( $relative_url, 0, 1 ) ) {
-			$relative_url = '/' . $relative_url;
-		}
-
-		$relative_url = str_replace( "'", "\\'", $relative_url );
-		$replacement  = "<?php echo esc_url( home_url( '{$relative_url}' ) ); ?>";
-
-		if ( false !== strpos( $absolute_url, '\\/' ) ) {
-			return str_replace( '/', '\\/', $replacement );
-		}
-
-		return $replacement;
-	}
-
-	/**
-	 * Convert an absolute site URL into a dynamic home_url() function call.
-	 *
-	 * @param string $absolute_url Site absolute URL (escaped or unescaped).
-	 * @return string
-	 */
-	private static function absolute_site_url_to_home_url_call( $absolute_url ) {
-		$normalized_url = str_replace( '\\/', '/', $absolute_url );
-		$relative_url   = null;
-
-		foreach ( self::get_local_url_prefixes() as $prefix ) {
-			if ( str_starts_with( $normalized_url, $prefix ) ) {
-				$relative_url = substr( $normalized_url, strlen( $prefix ) );
-				break;
-			}
-		}
-
-		if ( null === $relative_url ) {
-			return $absolute_url;
-		}
-
-		if ( '' === $relative_url ) {
-			$relative_url = '/';
-		} elseif ( '/' !== substr( $relative_url, 0, 1 ) ) {
-			$relative_url = '/' . $relative_url;
-		}
-
-		$relative_url = str_replace( "'", "\\'", $relative_url );
-
-		return "home_url( '{$relative_url}' )";
-	}
-
-	/**
-	 * Replace local absolute URLs inside esc_url('...') calls with esc_url( home_url('...') ).
-	 *
-	 * @param string $content Template or pattern content.
-	 * @return string
-	 */
-	private static function replace_site_urls_inside_esc_url_calls( $content ) {
-		if ( empty( $content ) || ! is_string( $content ) ) {
-			return $content;
-		}
-
-		foreach ( self::get_local_url_prefixes() as $prefix ) {
-			$patterns = array(
-				"~esc_url\\(\\s*'(" . preg_quote( $prefix, '~' ) . "[^\\s\"'<>)]*)'\\s*\\)~",
-				"~esc_url\\(\\s*\"(" . preg_quote( $prefix, '~' ) . "[^\\s\"'<>)]*)\"\\s*\\)~",
-				"~esc_url\\(\\s*'(" . preg_quote( str_replace( '/', '\\/', $prefix ), '~' ) . "[^\\s\"'<>)]*)'\\s*\\)~",
-				"~esc_url\\(\\s*\"(" . preg_quote( str_replace( '/', '\\/', $prefix ), '~' ) . "[^\\s\"'<>)]*)\"\\s*\\)~",
-			);
-
-			foreach ( $patterns as $pattern ) {
-				$content = preg_replace_callback(
-					$pattern,
-					function ( $matches ) {
-						$home_url_call = self::absolute_site_url_to_home_url_call( $matches[1] );
-
-						if ( $home_url_call === $matches[1] ) {
-							return $matches[0];
-						}
-
-						return "esc_url( {$home_url_call} )";
-					},
-					$content
-				);
-			}
-		}
-
-		return $content;
-	}
-
-	/**
-	 * Convert an active-theme path URL into a dynamic get_template_directory_uri() expression.
-	 *
-	 * @param string $asset_url Active-theme URL/path (escaped or unescaped).
-	 * @return string
-	 */
-	private static function active_theme_path_to_template_directory_uri_php( $asset_url ) {
-		$normalized_url = str_replace( '\\/', '/', $asset_url );
-		$relative_path  = null;
-
-		$prefixes = array_merge( self::get_active_theme_absolute_url_prefixes(), self::get_active_theme_path_prefixes() );
-
-		foreach ( $prefixes as $prefix ) {
-			$normalized_prefix = str_replace( '\\/', '/', $prefix );
-
-			if ( str_starts_with( $normalized_url, $normalized_prefix ) ) {
-				$relative_path = ltrim( substr( $normalized_url, strlen( $normalized_prefix ) ), '/' );
-				break;
-			}
-		}
-
-		if ( null === $relative_path ) {
-			return $asset_url;
-		}
-
-		$replacement = "<?php echo esc_url( get_template_directory_uri() ); ?>";
-
-		if ( '' !== $relative_path ) {
-			$replacement .= '/' . str_replace( "'", "\\'", $relative_path );
-		}
-
-		if ( false !== strpos( $asset_url, '\\/' ) ) {
-			return str_replace( '/', '\\/', $replacement );
-		}
-
-		return $replacement;
-	}
-
-	/**
-	 * Replace active-theme URLs/paths with dynamic get_template_directory_uri() output.
+	 * Replace active-theme URLs/paths with dynamic get_stylesheet_directory_uri() output.
 	 *
 	 * @param string $content Template or pattern content.
 	 * @return string
 	 */
 	public static function replace_active_theme_paths_with_dynamic_function( $content ) {
-		if ( empty( $content ) || ! is_string( $content ) ) {
-			return $content;
+
+		$theme_prefixes = self::get_active_theme_prefixes();
+
+		foreach ( self::get_prefix_variants( $theme_prefixes['absolute_url'] ) as $variant ) {
+			$content = self::replace_patterns(
+				$content,
+				function ( $matches ) use ( $theme_prefixes ) {
+					return self::theme_url_to_php( $matches[0], $theme_prefixes );
+				},
+				'~' . preg_quote( $variant, '~' ) . self::URL_SUFFIX_REGEX . '~'
+			);
 		}
 
-		$prefixes = array_merge( self::get_active_theme_absolute_url_prefixes(), self::get_active_theme_path_prefixes() );
-
-		foreach ( $prefixes as $prefix ) {
-			$patterns = array(
-				"~" . preg_quote( $prefix, '~' ) . "[^\\s\"'<>)]*~",
-				"~" . preg_quote( str_replace( '/', '\\/', $prefix ), '~' ) . "[^\\s\"'<>)]*~",
+		// Match only root-relative paths.
+		// The leading boundary prevents matching the path part of an absolute URL,
+		// because absolute URLs are handled in the previous pass.
+		foreach ( self::get_prefix_variants( $theme_prefixes['relative_path'] ) as $variant ) {
+			$content = self::replace_patterns(
+				$content,
+				function ( $matches ) use ( $theme_prefixes ) {
+					return $matches[1] . self::theme_url_to_php( $matches[2], $theme_prefixes );
+				},
+				'~(^|[^[:alnum:]._-])(' . preg_quote( $variant, '~' ) . self::URL_SUFFIX_REGEX . ')~'
 			);
-
-			foreach ( $patterns as $pattern ) {
-				$content = preg_replace_callback(
-					$pattern,
-					function ( $matches ) {
-						return self::active_theme_path_to_template_directory_uri_php( $matches[0] );
-					},
-					$content
-				);
-			}
 		}
 
 		return $content;
@@ -252,25 +51,17 @@ class CBT_Theme_URLs {
 	 * @return string
 	 */
 	public static function replace_site_urls_with_dynamic_function( $content ) {
-		if ( empty( $content ) || ! is_string( $content ) ) {
-			return $content;
-		}
 
-		$content = self::replace_site_urls_inside_esc_url_calls( $content );
+		$content = self::replace_site_urls_in_esc_url_calls( $content );
 
-		foreach ( self::get_local_url_prefixes() as $prefix ) {
-			$patterns = array(
-				"~" . preg_quote( $prefix, '~' ) . "[^\\s\"'<>)]*~",
-				"~" . preg_quote( str_replace( '/', '\\/', $prefix ), '~' ) . "[^\\s\"'<>)]*~",
-			);
-
-			foreach ( $patterns as $pattern ) {
-				$content = preg_replace_callback(
-					$pattern,
+		foreach ( self::get_local_url_prefixes() as $local_url_prefix ) {
+			foreach ( self::get_prefix_variants( $local_url_prefix ) as $variant ) {
+				$content = self::replace_patterns(
+					$content,
 					function ( $matches ) {
-						return self::absolute_site_url_to_home_url_php( $matches[0] );
+						return self::site_url_to_php( $matches[0] );
 					},
-					$content
+					'~' . preg_quote( $variant, '~' ) . self::URL_SUFFIX_REGEX . '~'
 				);
 			}
 		}
@@ -291,5 +82,314 @@ class CBT_Theme_URLs {
 		}
 
 		return $template;
+	}
+
+	/**
+	 * Get the root-relative path prefix for the active theme directory.
+	 *
+	 * @return string
+	 */
+	private static function get_active_theme_path_prefix() {
+
+		$stylesheet = wp_get_theme()->get_stylesheet();
+		$content_path = wp_parse_url( content_url(), PHP_URL_PATH );
+
+		return trailingslashit( $content_path . '/themes/' . $stylesheet );
+	}
+
+	/**
+	 * Get active-theme prefixes used for URL/path matching.
+	 *
+	 * @return array
+	 */
+	private static function get_active_theme_prefixes() {
+		return array(
+			'absolute_url'  => trailingslashit( get_stylesheet_directory_uri() ),
+			'relative_path' => self::get_active_theme_path_prefix(),
+		);
+	}
+
+	/**
+	 * Get unique URL prefixes that should be treated as local site URLs.
+	 *
+	 *
+	 * @return array
+	 */
+	private static function get_local_url_prefixes() {
+
+		return array_unique(
+			array(
+				home_url(),
+				site_url(),
+			)
+		);
+
+	}
+
+	/**
+	 * Parse local URL prefixes into host/scheme/port/path tuples.
+	 *
+	 * @return array
+	 */
+	private static function get_local_url_bases() {
+
+		$local_bases = array();
+		foreach ( self::get_local_url_prefixes() as $prefix ) {
+			$prefix_parts = wp_parse_url( $prefix );
+			if ( ! is_array( $prefix_parts ) || empty( $prefix_parts['host'] ) || empty( $prefix_parts['scheme'] ) ) {
+				continue;
+			}
+
+			$local_bases[] = array(
+				'host'   => strtolower( $prefix_parts['host'] ),
+				'scheme' => strtolower( $prefix_parts['scheme'] ),
+				'port'   => self::get_url_port( $prefix_parts ),
+				'path'   => isset( $prefix_parts['path'] ) && is_string( $prefix_parts['path'] ) ? rtrim( $prefix_parts['path'], '/' ) : '',
+			);
+		}
+
+		return $local_bases;
+	}
+
+	/**
+	 * Get plain and JSON-escaped variants for a URL prefix.
+	 *
+	 * @param string $prefix URL prefix.
+	 * @return array
+	 */
+	private static function get_prefix_variants( $prefix ) {
+
+		$variants       = array( $prefix );
+		$escaped_prefix = str_replace( '/', '\\/', $prefix );
+		if ( $escaped_prefix !== $prefix ) {
+			$variants[] = $escaped_prefix;
+		}
+
+		return $variants;
+	}
+
+	/**
+	 * Convert an absolute local site URL into a relative URL suitable for home_url().
+	 *
+	 * @param string $absolute_url Site absolute URL (escaped or unescaped).
+	 * @return string|null
+	 */
+	private static function get_relative_site_path( $absolute_url ) {
+		$absolute_parts = wp_parse_url( self::normalize_slashes( $absolute_url ) );
+		if ( ! is_array( $absolute_parts ) || empty( $absolute_parts['host'] ) || empty( $absolute_parts['scheme'] ) ) {
+			return null;
+		}
+
+		$absolute_host   = strtolower( $absolute_parts['host'] );
+		$absolute_scheme = strtolower( $absolute_parts['scheme'] );
+		$absolute_port   = self::get_url_port( $absolute_parts );
+		$absolute_path   = isset( $absolute_parts['path'] ) && '' !== $absolute_parts['path'] ? $absolute_parts['path'] : '/';
+
+		foreach ( self::get_local_url_bases() as $local_base ) {
+			// @why condition
+			if (
+				$local_base['host'] !== $absolute_host ||
+				$local_base['scheme'] !== $absolute_scheme ||
+				$local_base['port'] !== $absolute_port
+			) {
+				continue;
+			}
+
+			$prefix_path = $local_base['path'];
+			if ( '' === $prefix_path || '/' === $prefix_path ) {
+				$relative_url = $absolute_path;
+			} else {
+				if ( $absolute_path !== $prefix_path && ! str_starts_with( $absolute_path, $prefix_path . '/' ) ) {
+					continue;
+				}
+
+				$relative_url = substr( $absolute_path, strlen( $prefix_path ) );
+			}
+
+			if ( '' === $relative_url ) {
+				$relative_url = '/';
+			} elseif ( '/' !== substr( $relative_url, 0, 1 ) ) {
+				$relative_url = '/' . $relative_url;
+			}
+
+			if ( isset( $absolute_parts['query'] ) && '' !== $absolute_parts['query'] ) {
+				$relative_url .= '?' . $absolute_parts['query'];
+			}
+
+			if ( isset( $absolute_parts['fragment'] ) && '' !== $absolute_parts['fragment'] ) {
+				$relative_url .= '#' . $absolute_parts['fragment'];
+			}
+
+			return $relative_url;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Return a normalized explicit port for URL-part comparisons.
+	 *
+	 * This treats implicit defaults as explicit (`http` => 80, `https` => 443),
+	 * so equivalent URLs with/without the default port compare equal.
+	 *
+	 * @param array $url_parts Parsed URL parts.
+	 * @return int|null
+	 */
+	private static function get_url_port( $url_parts ) {
+		if ( isset( $url_parts['port'] ) ) {
+			return (int) $url_parts['port'];
+		}
+
+		$scheme = isset( $url_parts['scheme'] ) && is_string( $url_parts['scheme'] ) ? strtolower( $url_parts['scheme'] ) : '';
+		if ( 'http' === $scheme ) {
+			return 80;
+		}
+
+		if ( 'https' === $scheme ) {
+			return 443;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Replace local absolute URLs inside esc_url('...') with esc_url( home_url('...') ).
+	 *
+	 * @param string $content Template or pattern content.
+	 * @return string
+	 */
+	private static function replace_site_urls_in_esc_url_calls( $content ) {
+		foreach ( self::get_local_url_prefixes() as $local_url_prefix ) {
+			foreach ( self::get_prefix_variants( $local_url_prefix ) as $variant ) {
+				$quoted_variant = preg_quote( $variant, '~' );
+				$content        = self::replace_patterns(
+					$content,
+					array( __CLASS__, 'replace_site_url_in_esc_url_call' ),
+					'~esc_url\(\s*\'(' . $quoted_variant . self::URL_SUFFIX_REGEX . ')\'\s*\)~',
+					'~esc_url\(\s*"(' . $quoted_variant . self::URL_SUFFIX_REGEX . ')"\s*\)~'
+				);
+			}
+		}
+
+		return $content;
+	}
+
+	/**
+	 * Replace a matched esc_url() call containing a local absolute URL with
+	 * esc_url( home_url() ).
+	 *
+	 * @param array $matches Regular expression matches from preg_replace_callback().
+	 * @return string
+	 */
+	private static function replace_site_url_in_esc_url_call( $matches ) {
+
+		$home_url_call = self::get_home_url_call( $matches[1] );
+		if ( null === $home_url_call ) {
+			return $matches[0];
+		}
+
+		return "esc_url( {$home_url_call} )";
+	}
+
+	/**
+	 * Apply a callback replacement for each regex pattern.
+	 *
+	 *
+	 * @param string   $content Content to transform.
+	 * @param callable $callback Callback used by preg_replace_callback.
+	 * @param string   ...$patterns Regex patterns.
+	 * @return string
+	 */
+	private static function replace_patterns( $content, $callback, ...$patterns ) {
+		foreach ( $patterns as $pattern ) {
+			$result = preg_replace_callback( $pattern, $callback, $content );
+			$content = $result;
+		}
+
+		return $content;
+	}
+
+	/**
+	 * Convert an active-theme URL/path into a get_stylesheet_directory_uri() expression.
+	 *
+	 * @param string $asset_url Active-theme URL/path (escaped or unescaped).
+	 * @param array  $theme_prefixes Active-theme prefixes to compare against.
+	 * @return string
+	 */
+	private static function theme_url_to_php( $asset_url, $theme_prefixes ) {
+		$normalized_url = self::normalize_slashes( $asset_url );
+		$relative_path  = null;
+
+		foreach ( $theme_prefixes as $theme_prefix ) {
+			if ( '' === $theme_prefix ) {
+				continue;
+			}
+
+			$normalized_prefix = self::normalize_slashes( $theme_prefix );
+			if ( str_starts_with( $normalized_url, $normalized_prefix ) ) {
+				$relative_path = substr( $normalized_url, strlen( $normalized_prefix ) );
+				break;
+			}
+		}
+
+		$replacement = '<?php echo esc_url( get_stylesheet_directory_uri() ); ?>';
+		if ( '' !== $relative_path ) {
+			$replacement .= '/' . self::escape_single_quoted_php_string( $relative_path );
+		}
+
+		return $replacement;
+	}
+
+	/**
+	 * Build a dynamic home_url() call from an absolute local URL.
+	 *
+	 * @param string $absolute_url Site absolute URL (escaped or unescaped).
+	 * @return string|null
+	 */
+	private static function get_home_url_call( $absolute_url ) {
+		$relative_url = self::get_relative_site_path( $absolute_url );
+		if ( null === $relative_url ) {
+			return null;
+		}
+
+		$relative_url = self::escape_single_quoted_php_string( $relative_url );
+
+		return "home_url( '{$relative_url}' )";
+	}
+
+	/**
+	 * Convert an absolute local site URL into a dynamic home_url() expression.
+	 *
+	 * @param string $absolute_url Site absolute URL (escaped or unescaped).
+	 * @return string
+	 */
+	private static function site_url_to_php( $absolute_url ) {
+		$home_url_call = self::get_home_url_call( $absolute_url );
+
+		if ( null === $home_url_call ) {
+			return $absolute_url;
+		}
+
+		return "<?php echo esc_url( {$home_url_call} ); ?>";
+	}
+
+	/**
+	 * Normalize escaped forward slashes in URL-like strings.
+	 *
+	 * @param string $value URL-like string.
+	 * @return string
+	 */
+	private static function normalize_slashes( $value ) {
+		return str_replace( '\\/', '/', $value );
+	}
+
+	/**
+	 * Escape a value for interpolation into a single-quoted PHP string literal.
+	 *
+	 * @param string $value Raw string value.
+	 * @return string
+	 */
+	private static function escape_single_quoted_php_string( $value ) {
+		return str_replace( "'", "\\'", $value );
 	}
 }
