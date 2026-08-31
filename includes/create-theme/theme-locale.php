@@ -28,7 +28,7 @@ class CBT_Theme_Locale {
 		$text_domain = self::escape_php_single_quoted_string( wp_get_theme()->get( 'TextDomain' ) );
 
 		if ( empty( $tokenized['tokens'] ) ) {
-			return "<?php esc_attr_e('" . $tokenized['text'] . "', '$text_domain');?>";
+			return "<?php esc_attr_e( '" . $tokenized['text'] . "', '$text_domain' ); ?>";
 		}
 
 		$translation_call  = "__( '" . $tokenized['text'] . "', '$text_domain' )";
@@ -164,7 +164,7 @@ class CBT_Theme_Locale {
 		if ( ! empty( $tokens ) ) {
 			$php_tag  = '<?php ';
 			$php_tag .= $translators_note . "\n";
-			$php_tag .= "echo sprintf( esc_html__( '$text', '$text_domain' ), " . implode(
+			$php_tag .= "printf( esc_html__( '$text', '$text_domain' ), " . implode(
 				', ',
 				array_map(
 					function ( $token ) {
@@ -176,7 +176,7 @@ class CBT_Theme_Locale {
 			return $php_tag;
 		}
 
-		return "<?php esc_html_e('" . $string . "', '$text_domain');?>";
+		return "<?php esc_html_e( '" . $string . "', '$text_domain' ); ?>";
 	}
 
 	/**
@@ -203,7 +203,7 @@ class CBT_Theme_Locale {
 
 		$string      = self::escape_php_single_quoted_string( $string );
 		$text_domain = self::escape_php_single_quoted_string( wp_get_theme()->get( 'TextDomain' ) );
-		return "<?php esc_attr_e('" . $string . "', '$text_domain');?>";
+		return "<?php esc_attr_e( '" . $string . "', '$text_domain' ); ?>";
 	}
 
 	/**
